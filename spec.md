@@ -11,7 +11,8 @@
 3. [Architecture](#architecture)
 4. [Database Schema](#database-schema)
 5. [Workflows](#workflows)
-    - [Workflow 0 — OnlineJobs.ph Job Sync](#workflow-0--onlinejobsph-job-sync)
+    - [Workflow 0 — OnlineJobs.ph Job Sync (New Jobs)](#workflow-0--onlinejobsph-job-sync-new-jobs)
+    - [Workflow 0 — OnlineJobs.ph Job Sync (Recently Updated)](#workflow-0--onlinejobsph-job-sync-recently-updated)
     - [Workflow 1 — Subscription Manager](#workflow-1--subscription-manager)
     - [Workflow 2 — Job Alert Notifier](#workflow-2--job-alert-notifier)
 6. [Telegram Bot Commands](#telegram-bot-commands)
@@ -25,7 +26,7 @@
 
 ## Overview
 
-OLJAlerts is an automated job alert system that syncs job postings from OnlineJobs.ph into a PostgreSQL database and notifies Telegram users when a new posting matches their subscribed keywords.
+OLJAlerts is an automated job alert system that syncs job postings from OnlineJobs.ph into a PostgreSQL database and notifies Telegram users when a new posting matches their subscribed keywords. The system uses two separate workflows to capture both new job postings and recently updated jobs with old job_ids.
 
 Users interact entirely through a Telegram bot. They subscribe to keywords (e.g. `n8n`, `virtual assistant`, `react`), and whenever a matching job is inserted into the database, they receive an instant Telegram message.
 
@@ -55,28 +56,42 @@ Users interact entirely through a Telegram bot. They subscribe to keywords (e.g.
 │  └─────────────────────┘  └─────────────────────┘  │
 │                            │                       │
 └────────────────────────────┼───────────────────────┘
-                             │
-           ┌─────────────────┼─────────────────┐
-           │                 │                 │
-           ▼                 ▼                 ▼
-     ┌──────────┐      ┌──────────┐      ┌──────────┐
-     │Workflow 0│      │Workflow 1│      │Workflow 2│
-     │Job Sync  │      │Sub Mgr   │      │Alert Not.│
-     │          │      │Keywordsub │      │Polling   │
-     │Scheduled │      │Telegram  │      │Trigger   │
-     │Trigger   │      │Trigger   │      │by Processed│
-    └────┬─────┘      └────┬─────┘      └────┬─────┘
-         │                 │                 │
-         ▼                 ▼                 ▼
-   OnlineJobs.ph        Telegram User      Telegram API
-   (HTTP Scrape)        (Commands)      (Notifications)
+                              │
+            ┌─────────────────┼─────────────────┐
+            │                 │                 │
+            ▼                 ▼                 ▼
+      ┌──────────┐      ┌──────────┐      ┌──────────┐
+      │Workflow 0│      │Workflow 1│      │Workflow 2│
+      │Job Sync  │      │Sub Mgr   │      │Alert Not.│
+      │(New)     │      │Keywordsub │      │Polling   │
+      │Scheduled │      │Telegram  │      │Trigger   │
+      │2 min     │      │Trigger   │      │by Processed│
+     └────┬─────┘      └────┬─────┘      └────┬─────┘
+          │                 │                 │
+          ▼                 ▼                 ▼
+    OnlineJobs.ph        Telegram User      Telegram API
+    (HTTP Scrape)        (Commands)      (Notifications)
+
+      ┌──────────┐
+      │Workflow 0│
+      │Job Sync  │
+      │(Updated) │
+      │Scheduled │
+      │15 min    │
+     └────┬─────┘
+          │
+          ▼
+    OnlineJobs.ph
+    (Job Search Page)
 ```
 
 **Design Philosophy**: Fully decoupled modular architecture where each workflow operates independently through PostgreSQL as the central data bus.
 
 **Workflow Independence:**
 
-- **Workflow 0 — OnlineJobs.ph Job Sync**: Scheduled trigger (every 5-10 min). Scrapes new job postings from OnlineJobs.ph using HTTP GET requests, parses HTML with CSS selectors, and batch inserts into `job_postings` table. Implements intelligent stop conditions (batch limit or consecutive 404s) and retry logic. **No dependency on other workflows.**
+- **Workflow 0 — OnlineJobs.ph Job Sync (New Jobs)**: Scheduled trigger (every 2 minutes). Scrapes new job postings from OnlineJobs.ph using incremental ID-based fetching (last job_id + 1 through + 5), parses HTML with CSS selectors, and inserts into `job_postings` table with `ON CONFLICT DO NOTHING`. No retry logic on 404s. **No dependency on other workflows.**
+
+- **Workflow 0 — OnlineJobs.ph Job Sync (Recently Updated)**: Scheduled trigger (every 15 minutes). Scrapes recently updated jobs from OnlineJobs.ph job search page, removes duplicates against existing job_ids in database, parses HTML with CSS selectors, and inserts/updates into `job_postings` table with `ON CONFLICT DO UPDATE` to capture updated content for existing job_ids. **No dependency on other workflows.**
 
 - **Workflow 1 — Subscription Manager**: Handles `/keywordsub` command from Telegram users. Deletes existing keywords for user, then inserts new keywords (comma-separated, max 3). Reads and writes to `user_subscriptions`. **No dependency on other workflows.**
 
@@ -170,7 +185,7 @@ CREATE TABLE user_subscriptions (
 
 ## Workflows
 
-### Workflow 0 — OnlineJobs.ph Job Sync
+### Workflow 0 — OnlineJobs.ph Job Sync (New Jobs)
 
 **Trigger**: Schedule Trigger (every 2 minutes)
 
@@ -230,6 +245,80 @@ This ensures only complete, high-quality job postings are stored.
 - Total of 5 HTTP requests per 2-minute cycle
 - This conservative approach should avoid triggering anti-bot measures
 - If rate-limit errors occur, increase the schedule interval or add longer delays
+
+---
+
+### Workflow 0 — OnlineJobs.ph Job Sync (Recently Updated)
+
+**Trigger**: Schedule Trigger (every 15 minutes)
+
+**Purpose**: Scrape recently updated jobs from OnlineJobs.ph job search page and insert/update into `job_postings` table. This workflow captures jobs with old job_ids that have been updated by job posters, which the incremental new job sync would miss.
+
+| Step | Node | Description |
+|---|---|---|
+| 1 | Schedule Trigger | Runs every 15 minutes |
+| 2 | HTTP Request | GET `https://www.onlinejobs.ph/jobseekers/jobsearch?jobkeyword=&skill_tags=&gig=on&partTime=on&fullTime=on` |
+| 3 | HTML Extract | Parse job IDs from search results using CSS selectors |
+| 4 | Remove Duplicates | Remove job_ids that already exist in database |
+| 5 | Postgres | `SELECT job_id FROM job_postings` (for duplicate detection) |
+| 6 | Merge | Combine search results with database to identify new/updated jobs |
+| 7 | Split In Batches | Loop through job IDs to fetch full details |
+| 8 | Set | Store `job_id` from current iteration |
+| 9 | HTTP Request | GET `https://www.onlinejobs.ph/jobseekers/job/{{ $json.jobId }}` |
+| 10 | HTML Extract | Parse using CSS selectors (same field extraction as new job sync) |
+| 11 | IF | Check if job has valid data (non-empty description, type_of_work, compensation, job_date) |
+| 12-false | Skip | Continue to next job ID if validation fails |
+| 12-true | Set | Map extracted fields to database column names |
+| 13-true | Postgres | `INSERT INTO job_postings (...) VALUES (...)` with `ON CONFLICT (job_id) DO UPDATE` |
+| 14 | Wait | 0.05 second delay between iterations |
+| 15 | Loop Back | Continue until all job IDs processed |
+| 16 | Stop | End workflow |
+
+**Field Extraction (CSS Selectors):**
+
+Same as new job sync workflow:
+
+| Field | CSS Selector |
+|---|---|
+| `job_title` | `h1` |
+| `job_description` | `.job-description` |
+| `job_skills` | `.card-worker-topskill` |
+| `type_of_work` | `h3:contains("TYPE OF WORK") + p` |
+| `compensation` | `h3:contains("WAGE / SALARY") + p` |
+| `hours_per_week` | `h3:contains("HOURS PER WEEK") + p` |
+| `job_date` | `h3:contains("DATE UPDATED") + p` |
+
+**Validation Logic:**
+
+Same as new job sync workflow — a job is only inserted/updated if ALL of the following fields are non-empty:
+- `job_description`
+- `type_of_work`
+- `compensation`
+- `job_date`
+
+**Duplicate Detection Logic:**
+
+The workflow uses a Merge node with `joinMode: keepNonMatches` to compare job IDs from the search results against existing job_ids in the database. This ensures only new or recently updated jobs (with old job_ids not currently in the database) are processed. Jobs that already exist in the database are skipped.
+
+**Implementation Details:**
+
+- **Variable batch size**: Fetches all jobs from the job search page (number varies based on search results)
+- **Schedule**: Every 15 minutes
+- **Job search page scraping**: Fetches jobs from the main job search page instead of incremental ID-based fetching
+- **ON CONFLICT DO UPDATE**: Uses PostgreSQL's upsert to either insert new jobs or update existing ones with new content
+- **Duplicate removal**: Removes job_ids that already exist in the database to avoid unnecessary HTTP requests
+- **Small delay**: 0.05 second wait between HTTP requests to avoid rate limiting
+
+**Rate Limiting Considerations:**
+
+- HTTP requests occur every 0.05 seconds within a batch
+- Total number of HTTP requests varies based on job search page results (typically 10-30 jobs)
+- Runs every 15 minutes, which is less frequent than the new job sync
+- Conservative approach should avoid triggering anti-bot measures
+
+**Why This Workflow is Needed:**
+
+OnlineJobs.ph job posters can update job postings without changing the job_id. These updated jobs appear in the job search results but would not be captured by the incremental new job sync (which only processes sequential job_ids). This workflow ensures that recently updated jobs with old job_ids are synced and subscribers receive notifications for these updates.
 
 ---
 
@@ -469,12 +558,19 @@ Looking for an experienced n8n developer to build automation workflows...
 
 ## Environment Variables
 
-### Sync Workflow Configuration (Workflow 0)
+### Sync Workflow Configuration (Workflow 0 - New Jobs)
 
 | Variable | Description | Value |
 |---|---|---|
-| `SYNC_SCHEDULE_MINUTES` | How often to run the job sync | `2` |
+| `SYNC_SCHEDULE_MINUTES` | How often to run the new job sync | `2` |
 | `SYNC_BATCH_SIZE` | Max jobs to fetch per execution | `5` |
+| `HTTP_REQUEST_DELAY_SECONDS` | Delay between HTTP requests | `0.05` |
+
+### Sync Workflow Configuration (Workflow 0 - Recently Updated)
+
+| Variable | Description | Value |
+|---|---|---|
+| `SYNC_UPDATED_SCHEDULE_MINUTES` | How often to run the recently updated job sync | `15` |
 | `HTTP_REQUEST_DELAY_SECONDS` | Delay between HTTP requests | `0.05` |
 
 ### Subscription Manager Configuration (Workflow 1)
@@ -503,13 +599,22 @@ Looking for an experienced n8n developer to build automation workflows...
 
 ## Constraints & Limitations
 
-### Scraping & Data Sync (Workflow 0)
+### Scraping & Data Sync (Workflow 0 - New Jobs)
 - **Rate limiting risk** — Scraping every 2 minutes with 5 requests per batch may trigger anti-bot measures. Monitor for 429 errors and adjust schedule or delay if needed.
 - **CSS selector fragility** — HTML structure changes on OnlineJobs.ph will break field extraction. Needs maintenance when job pages change.
 - **No sequential ID tracking** — The workflow simply processes next 5 job IDs regardless of gaps or 404s. This may skip valid jobs if there are large gaps.
 - **No retry logic** — If a job ID returns 404 or errors, the workflow continues to the next ID without retrying.
 - **No company name extraction** — Currently not extracting employer name. Can be added if needed.
 - **Failed jobs are skipped** — Jobs that fail validation (missing required fields) are silently skipped and not logged.
+
+### Scraping & Data Sync (Workflow 0 - Recently Updated)
+- **Rate limiting risk** — Scraping every 15 minutes with variable request count may trigger anti-bot measures if job search page contains many results. Monitor for 429 errors and adjust schedule or delay if needed.
+- **CSS selector fragility** — HTML structure changes on OnlineJobs.ph (both job search page and individual job pages) will break field extraction. Needs maintenance when pages change.
+- **Variable batch size** — The number of jobs processed depends on the job search page results, which can vary significantly.
+- **No retry logic** — If a job ID returns 404 or errors, the workflow continues to the next ID without retrying.
+- **No company name extraction** — Currently not extracting employer name. Can be added if needed.
+- **Failed jobs are skipped** — Jobs that fail validation (missing required fields) are silently skipped and not logged.
+- **Potential for missed updates** — Only captures recently updated jobs that appear on the job search page. Older updates may not be visible in search results.
 
 ### Subscription Manager (Workflow 1)
 - **Replace-all behavior** — The `/keywordsub` command deletes all existing keywords before adding new ones. Users cannot add/remove individual keywords.
@@ -530,7 +635,7 @@ Looking for an experienced n8n developer to build automation workflows...
 
 ## Future Improvements
 
-### Sync Workflow (Workflow 0)
+### Sync Workflow (Workflow 0 - New Jobs)
 - **Company name extraction** — Add `company` field to track employer names
 - **Dynamic job listing page scraping** — Instead of incremental ID fetching, scrape the job listings page for a more robust discovery mechanism
 - **Incremental deduplication check** — Use HTTP HEAD requests before full GET to avoid downloading duplicate content
@@ -539,6 +644,16 @@ Looking for an experienced n8n developer to build automation workflows...
 - **Retry logic** — Add retry mechanism for failed HTTP requests with exponential backoff
 - **Sequential gap handling** — Implement logic to track and handle large gaps in job IDs
 - **Error logging** — Add `sync_errors` table to log failed job IDs for manual review
+
+### Sync Workflow (Workflow 0 - Recently Updated)
+- **Company name extraction** — Add `company` field to track employer names
+- **Incremental deduplication check** — Use HTTP HEAD requests before full GET to avoid downloading duplicate content
+- **RSS feed monitoring** — If OnlineJobs.ph provides RSS feeds for updated jobs, use instead of scraping
+- **Retry logic** — Add retry mechanism for failed HTTP requests with exponential backoff
+- **Error logging** — Add `sync_errors` table to log failed job IDs for manual review
+- **Enhanced duplicate detection** — Track job content hashes to detect updates even when job_date hasn't changed
+- **Optimized job search queries** — Add filters to job search URL (e.g., date range, location) to reduce the number of jobs that need to be processed
+- **Parallel processing** — Process multiple job IDs in parallel for faster sync (with proper rate limiting)
 
 ### Subscription Manager (Workflow 1)
 - **Add/remove individual keywords** — Implement `/addkeyword` and `/removekeyword` commands for granular control

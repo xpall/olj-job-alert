@@ -10,7 +10,7 @@ Automated job alerts for OnlineJobs.ph — get notified on Telegram when jobs ma
 
 ## What It Does
 
-1. **Scrapes** OnlineJobs.ph every 2 minutes for new job postings
+1. **Scrapes** OnlineJobs.ph for new and recently updated job postings
 2. **Stores** jobs in a database
 3. **Lets you** subscribe to keywords via Telegram bot (https://t.me/OLJAlertBot)
 4. **Sends** you a Telegram message when a matching job is posted
@@ -31,11 +31,11 @@ Automated job alerts for OnlineJobs.ph — get notified on Telegram when jobs ma
 
 ```
 OnlineJobs.ph → n8n → PostgreSQL → n8n → Telegram → You
-   (new jobs)    (scrape)   (store)    (match)   (alert)
+   (new/updated jobs) (scrape)   (store)    (match)   (alert)
 ```
 
 Think of it as a pipeline:
-- **Stage 1:** Scrapes job listings automatically
+- **Stage 1:** Scrapes job listings automatically (new jobs every 2 min, recently updated every 15 min)
 - **Stage 2:** Stores everything in a database
 - **Stage 3:** Matches jobs against your keywords
 - **Stage 4:** Sends you alerts on Telegram
@@ -45,7 +45,8 @@ Think of it as a pipeline:
 ## Project Status
 
 **✅ Complete:**
-- Job Sync (Workflow 0) — Scrapes and stores job postings every 2 minutes
+- Job Sync (Workflow 0) — Scrapes new job postings every 2 minutes
+- Job Sync Recently Updated (Workflow 0) — Scrapes recently updated jobs with old job_ids every 15 minutes
 - Subscription Manager (Workflow 1) — Let you manage keywords via Telegram
 - Alert Notifier (Workflow 2 + Subworkflow) — Sends notifications when jobs match
 
@@ -100,11 +101,12 @@ Think of it as a pipeline:
 
 ## Next Steps
 
-All three workflows are complete and ready to use:
+All workflows are complete and ready to use:
 
-1. **Workflow 0** automatically scrapes job postings from OnlineJobs.ph every 2 minutes
-2. **Workflow 1** lets you subscribe to keywords via Telegram using `/keywordsub keyword1, keyword2, keyword3`
-3. **Workflow 2** automatically notifies you when a job matching your keywords is posted (uses word-boundary regex matching for precise keyword matching, avoiding false positives like 'ai' matching 'PAID')
+1. **Workflow 0 (Job Sync)** automatically scrapes new job postings from OnlineJobs.ph every 2 minutes using incremental ID-based fetching
+2. **Workflow 0 (Recently Updated)** scrapes recently updated jobs with old job_ids every 15 minutes from the job search page
+3. **Workflow 1** lets you subscribe to keywords via Telegram using `/keywordsub keyword1, keyword2, keyword3`
+4. **Workflow 2** automatically notifies you when a job matching your keywords is posted (uses word-boundary regex matching for precise keyword matching, avoiding false positives like 'ai' matching 'PAID')
 
 **Start using the bot:** https://t.me/OLJAlertBot
 
@@ -116,7 +118,8 @@ See `spec.md` for detailed technical specifications and implementation details.
 
 ## Notes
 
-- **Rate limiting:** Current settings scrape 5 jobs every 2 minutes with 0.05s delays between requests
+- **Rate limiting:** Current settings scrape 5 new jobs every 2 minutes with 0.05s delays between requests
+- **Recently updated jobs:** Scrapes job search page every 15 minutes to catch jobs with old job_ids that have been updated by posters
 - **Telegram commands:** Use `/keywordsub keyword1, keyword2, keyword3` to set your subscriptions (max 3 keywords)
 - **Modular design:** Each workflow operates independently through PostgreSQL as the data bus
 - **Replace-all behavior:** The `/keywordsub` command replaces all existing keywords, not additive
