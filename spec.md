@@ -278,7 +278,13 @@ This ensures only complete, high-quality job postings are stored.
 
 ### Workflow 2 — Job Alert Notifier
 
-**Trigger**: Schedule Trigger (every 20 seconds)
+**Architecture**: Split into Main Workflow (job processing) and Subworkflow (notification delivery)
+
+**Main Workflow Trigger**: Schedule Trigger (every 20 seconds)
+
+**Subworkflow Trigger**: Execute Workflow Trigger (called from Main Workflow)
+
+#### Main Workflow Steps
 
 | Step | Node | Description |
 |---|---|---|
@@ -286,46 +292,80 @@ This ensures only complete, high-quality job postings are stored.
 | 2 | Postgres | SELECT 1 unprocessed job post (WHERE is_processed = false) |
 | 3 | IF | Check if unprocessed job exists |
 | 4 | Postgres | SELECT DISTINCT keywords from user_subscriptions |
-| 5 | Code | Match keywords against job title and description |
+| 5 | Code | Match keywords against job title and description using word-boundary regex |
 | 6 | Code | Transform matched keywords to array |
 | 7 | IF | Check if any keywords matched |
-| 8 | Postgres | SELECT chat_ids for matched keywords |
-| 9 | Remove Duplicates | Deduplicate chat_ids (one message per user) |
-| 10 | Split In Batches | Loop through each subscriber |
+| 8 | Set | Prepare payload with matched keywords and job data |
+| 9 | Execute Workflow | Call "Workflow 2 - Job Alert Notifier subworkflow" |
+| 10 | Set | Prepare payload for marking job as processed |
 | 11 | Postgres | Update job post is_processed = true |
-| 12 | Telegram | Send HTML-formatted alert to subscriber |
-| 13 | Wait | 0.05 second delay between messages |
-| 14 | Loop Back | Continue until all subscribers notified |
-| 15 | Stop | End workflow |
+| 12 | Stop | End workflow (no match case) |
+
+#### Subworkflow Steps
+
+| Step | Node | Description |
+|---|---|---|
+| 1 | Execute Workflow Trigger | Receives data from Main Workflow |
+| 2 | Postgres | SELECT chat_ids for matched keywords |
+| 3 | Remove Duplicates | Deduplicate chat_ids (one message per user) |
+| 4 | Split In Batches | Loop through each subscriber |
+| 5 | Set | Prepare payload for marking job as processed |
+| 6 | Postgres | Update job post is_processed = true |
+| 7 | Telegram | Send HTML-formatted alert to subscriber |
+| 8 | Wait | 0.25 second delay between messages |
+| 9 | Loop Back | Continue until all subscribers notified |
+| 10 | Stop | End subworkflow |
+
+**Key Benefits of Split Architecture:**
+- **Better logging**: Subworkflow only saves successful executions, making it easier to track notification delivery
+- **Error isolation**: Notification failures don't affect job processing logic
+- **Reusability**: Subworkflow can be called from other workflows if needed
 
 **Keyword Matching Algorithm:**
 
 ```javascript
 // 1. Get job data (title and description)
+const jobData = $('Select 1 unprocessed job post').first().json;
+
 const description = (jobData.job_description || "").toLowerCase();
 const title = (jobData.job_title || "").toLowerCase();
 const fullText = title + " " + description;
 
 // 2. Get all keywords from database
-const allKeywords = /* from SQL query */;
+const allKeywords = $input.all().map(item => item.json.keyword);
 
-// 3. Filter: Keep ONLY keywords found in the text
+// 3. Filter: Keep ONLY keywords found in the text using word-boundary matching
 const matchedKeywords = allKeywords.filter(kw => {
-  return fullText.includes(kw.toLowerCase());
+  // Escape special regex characters to prevent syntax errors
+  const escapedKw = kw.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // Use word boundary matching for precise matches
+  const regex = new RegExp(`\\b${escapedKw}\\b`, 'i');
+  return regex.test(fullText);
 });
 
-// 4. Query subscribers for matched keywords
-// SQL: SELECT chat_id, keyword FROM user_subscriptions
-//      WHERE keyword = ANY(string_to_array(matched_keywords.join('|'), '|')::text[])
+// 4. Return the filtered list
+return matchedKeywords.map(kw => ({ json: { keyword: kw } }));
 ```
+
+**Matching Behavior:**
+- **Word-boundary matching**: Uses `\b` regex metacharacter to match whole words only
+- **Case-insensitive**: Uses the `'i'` flag for case-insensitive matching
+- **Special character escaping**: Properly escapes regex metacharacters in keywords (e.g., `c++`, `.net`)
+- **Examples**:
+  - 'ai' matches "AI specialist" ✓
+  - 'ai' does NOT match "PAID" ✗
+  - 'ai' does NOT match "TRAINING" ✗
+  - 'react' matches "React developer" ✓
+  - 'react' does NOT match "proactive" ✗
 
 **Processing Logic:**
 
-- **Polling approach**: Checks for unprocessed jobs every 20 seconds
-- **One job at a time**: Processes only 1 unprocessed job per execution
-- **Always marks processed**: Even if no keywords match, the job is marked as `is_processed = true` to prevent re-processing
-- **Duplicate prevention**: Uses `Remove Duplicates` node to ensure each user receives only one notification per job
-- **HTML formatting**: Telegram messages use HTML parse_mode for rich formatting with emojis
+- **Polling approach**: Main workflow checks for unprocessed jobs every 20 seconds
+- **One job at a time**: Main workflow processes only 1 unprocessed job per execution
+- **Always marks processed**: Even if no keywords match, job is marked as `is_processed = true` to prevent re-processing
+- **Duplicate prevention**: Subworkflow uses `Remove Duplicates` node to ensure each user receives only one notification per job
+- **HTML formatting**: Subworkflow sends Telegram messages using HTML parse_mode for rich formatting with emojis
+- **Execution tracking**: Subworkflow only saves successful executions, providing cleaner logs for notification delivery
 
 **Notification Format:**
 
@@ -478,14 +518,13 @@ Looking for an experienced n8n developer to build automation workflows...
 - **No keyword validation** — Keywords are not validated for relevance or appropriateness.
 - **Single command** — Only `/keywordsub` is implemented. No `/start`, `/help`, or other bot commands.
 
-### Alert Notifier (Workflow 2)
-- **Keyword matching is simple substring search** — no fuzzy matching or synonyms. A subscription to `react` will also match `react native` and `proactive`.
+### Alert Notifier (Workflow 2 + Subworkflow)
 - **One job per execution** — Only processes 1 unprocessed job per 20-second cycle. May not keep up with high-volume job postings.
 - **Polling vs triggers** — Uses polling approach (every 20 seconds) instead of PostgreSQL triggers. May introduce slight delay in notifications.
 - **No deduplication across runs** — The `is_processed` flag prevents re-processing, but if a job is skipped (validation failure), it may be re-attempted.
-- **Telegram rate limit** — Telegram allows ~30 messages/second per bot. Current 0.05 second delay is well within limits.
-- **No keyword escaping** — Keywords containing special characters may cause unexpected matching behavior.
+- **Telegram rate limit** — Telegram allows ~30 messages/second per bot. Current 0.25 second delay is well within limits.
 - **No feedback loop** — Users cannot provide feedback on job relevance (like/dislike) to improve matching.
+- **Workflow complexity** — Split architecture adds complexity but improves logging and error isolation.
 
 ---
 
@@ -525,4 +564,3 @@ Looking for an experienced n8n developer to build automation workflows...
 - **OLJAlerts web landing page** — Public page explaining the bot with a `/keywordsub` deep link
 - **Analytics** — Track popular keywords, job posting trends, user engagement
 - **Multi-user support** — Support multiple Telegram users with different subscriptions
-- **Keyword matching improvements** — Fuzzy matching, synonyms, advanced NLP techniques

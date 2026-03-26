@@ -47,7 +47,7 @@ Think of it as a pipeline:
 **✅ Complete:**
 - Job Sync (Workflow 0) — Scrapes and stores job postings every 2 minutes
 - Subscription Manager (Workflow 1) — Let you manage keywords via Telegram
-- Alert Notifier (Workflow 2) — Sends notifications when jobs match
+- Alert Notifier (Workflow 2 + Subworkflow) — Sends notifications when jobs match
 
 ---
 
@@ -104,7 +104,7 @@ All three workflows are complete and ready to use:
 
 1. **Workflow 0** automatically scrapes job postings from OnlineJobs.ph every 2 minutes
 2. **Workflow 1** lets you subscribe to keywords via Telegram using `/keywordsub keyword1, keyword2, keyword3`
-3. **Workflow 2** automatically notifies you when a job matching your keywords is posted
+3. **Workflow 2** automatically notifies you when a job matching your keywords is posted (uses word-boundary regex matching for precise keyword matching, avoiding false positives like 'ai' matching 'PAID')
 
 **Start using the bot:** https://t.me/OLJAlertBot
 
@@ -122,6 +122,7 @@ See `spec.md` for detailed technical specifications and implementation details.
 - **Replace-all behavior:** The `/keywordsub` command replaces all existing keywords, not additive
 - **HTML formatting:** Notifications use HTML formatting with emojis for better readability
 - **Job validation:** Only complete job postings (with description, type, compensation, date) are stored
+- **Word-boundary matching:** Keywords now match whole words only (e.g., 'ai' matches 'AI specialist' but not 'PAID', 'TRAIN', 'MAINTAIN')
 
 ---
 
