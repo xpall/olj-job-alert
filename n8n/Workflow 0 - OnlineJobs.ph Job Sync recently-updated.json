@@ -321,7 +321,7 @@
     },
     {
       "parameters": {
-        "amount": 10
+        "amount": 20
       },
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
