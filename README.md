@@ -8,12 +8,19 @@ Automated job alerts for OnlineJobs.ph — get notified on Telegram when jobs ma
 
 ---
 
+## Architecture
+
+![Architecture Diagram](misc/Diagram.jpg)
+
+---
+
 ## What It Does
 
 1. **Scrapes** OnlineJobs.ph for new and recently updated job postings
 2. **Stores** jobs in a database
 3. **Lets you** subscribe to keywords via Telegram bot (https://t.me/OLJAlertBot)
 4. **Sends** you a Telegram message when a matching job is posted
+5. **Auto-cleans** subscriptions when users block the bot
 
 ---
 
@@ -22,6 +29,7 @@ Automated job alerts for OnlineJobs.ph — get notified on Telegram when jobs ma
 - **Linux server** (self-hosted)
 - **n8n** (automation tool)
 - **PostgreSQL** (database)
+- **Supabase** (logging/analytics)
 - **Telegram Bot Token** (from @BotFather)
 - **Basic tech skills** (you got this!)
 
@@ -35,9 +43,9 @@ OnlineJobs.ph → n8n → PostgreSQL → n8n → Telegram → You
 ```
 
 Think of it as a pipeline:
-- **Stage 1:** Scrapes job listings automatically (new jobs every 2 min, recently updated every 15 min)
+- **Stage 1:** Scrapes job listings automatically (new jobs every 8 min, recently updated every 15 min)
 - **Stage 2:** Stores everything in a database
-- **Stage 3:** Matches jobs against your keywords
+- **Stage 3:** Matches jobs against your keywords (every 20 seconds)
 - **Stage 4:** Sends you alerts on Telegram
 
 ---
@@ -45,10 +53,24 @@ Think of it as a pipeline:
 ## Project Status
 
 **✅ Complete:**
-- Job Sync (Workflow 0) — Scrapes new job postings every 2 minutes
+- Job Sync (Workflow 0) — Scrapes new job postings every 8 minutes
 - Job Sync Recently Updated (Workflow 0) — Scrapes recently updated jobs with old job_ids every 15 minutes
-- Subscription Manager (Workflow 1) — Let you manage keywords via Telegram
-- Alert Notifier (Workflow 2 + Subworkflow) — Sends notifications when jobs match
+- Subscription Manager (Workflow 1) — Manage keywords, unsubscribe, view stats, admin commands, and help via Telegram
+- Alert Notifier (Workflow 2 + Subworkflow) — Sends notifications when jobs match, auto-cleans blocked users
+
+---
+
+## Telegram Bot Commands
+
+| Command | Description |
+|---|---|
+| `/keywordsub keyword1, keyword2, keyword3` | Subscribe to keywords (max 3, replaces existing) |
+| `/unsub` | Unsubscribe from all keywords |
+| `/stats` | View system stats (admin only) |
+| `/admin keyword1, keyword2, ...` | Set keywords with no limit (admin only) |
+| Any other message | Shows help with example commands |
+
+**Start using the bot:** https://t.me/OLJAlertBot
 
 ---
 
@@ -58,75 +80,39 @@ Think of it as a pipeline:
    - Install n8n on your Linux server
    - Set up PostgreSQL database
    - Create a Telegram bot via @BotFather
+   - Set up a Supabase project for logging
 
 2. **Create the database:**
-    ```sql
-    CREATE TABLE job_postings (
-      id               SERIAL PRIMARY KEY,
-      job_id           BIGINT NOT NULL UNIQUE,
-      job_title        TEXT,
-      job_description  TEXT,
-      job_skills       TEXT,
-      type_of_work     TEXT,
-      compensation     TEXT,
-      hours_per_week   TEXT,
-      job_date         DATE,
-      is_processed     BOOLEAN DEFAULT FALSE,
-      created_at       TIMESTAMPTZ DEFAULT NOW()
-    );
-
-    CREATE TABLE user_subscriptions (
-      id          SERIAL PRIMARY KEY,
-      chat_id     BIGINT NOT NULL,
-      keyword     TEXT NOT NULL,
-      created_at  TIMESTAMPTZ DEFAULT NOW(),
-      UNIQUE(chat_id, keyword)
-    );
-
-    CREATE INDEX idx_job_postings_is_processed ON job_postings(is_processed);
+    ```bash
+    psql -U postgres -f database/database_setup.sql
     ```
 
-3. **Build Workflow 0 in n8n:**
-   - Create a schedule trigger (every 5-10 minutes)
-   - Add HTTP Request nodes to fetch jobs
-   - Use HTML Extract to parse job details
-   - Insert into PostgreSQL database
+3. **Import workflows in n8n:**
+   - Import all 5 workflow JSON files from `n8n/`
+   - Configure PostgreSQL and Telegram credentials
+   - Configure Supabase credentials
+   - Enable all workflows
 
 4. **Test it:**
-   - Run the workflow
-   - Check the database for job postings
-   - Verify it's scraping correctly
-
----
-
-## Next Steps
-
-All workflows are complete and ready to use:
-
-1. **Workflow 0 (Job Sync)** automatically scrapes new job postings from OnlineJobs.ph every 2 minutes using incremental ID-based fetching
-2. **Workflow 0 (Recently Updated)** scrapes recently updated jobs with old job_ids every 15 minutes from the job search page
-3. **Workflow 1** lets you subscribe to keywords via Telegram using `/keywordsub keyword1, keyword2, keyword3`
-4. **Workflow 2** automatically notifies you when a job matching your keywords is posted (uses word-boundary regex matching for precise keyword matching, avoiding false positives like 'ai' matching 'PAID')
-
-**Start using the bot:** https://t.me/OLJAlertBot
-
-Simply start all three workflows in n8n, open the Telegram bot, and subscribe to your keywords to start receiving job alerts!
-
-See `spec.md` for detailed technical specifications and implementation details.
+   - Open Telegram and message the bot
+   - Use `/keywordsub keyword1, keyword2`
+   - Verify you receive job alerts
 
 ---
 
 ## Notes
 
-- **Rate limiting:** Current settings scrape 5 new jobs every 2 minutes with 0.05s delays between requests
-- **Recently updated jobs:** Scrapes job search page every 15 minutes to catch jobs with old job_ids that have been updated by posters
-- **Telegram commands:** Use `/keywordsub keyword1, keyword2, keyword3` to set your subscriptions (max 3 keywords)
-- **Modular design:** Each workflow operates independently through PostgreSQL as the data bus
+- **Rate limiting:** New jobs scraped every 8 minutes with 5 jobs per batch and 10s delays; recently updated jobs scraped every 15 minutes with 20s delays
+- **Keyword matching:** Uses word-boundary regex matching for precise results (e.g., 'ai' matches 'AI specialist' but not 'PAID')
+- **Auto-cleanup:** Blocked users have their subscriptions automatically removed
 - **Replace-all behavior:** The `/keywordsub` command replaces all existing keywords, not additive
-- **HTML formatting:** Notifications use HTML formatting with emojis for better readability
+- **Admin commands:** `/stats` and `/admin` are restricted to authorized admin users
+- **Help fallback:** Any unrecognized message shows a help example
+- **Logging:** All bot interactions are logged to Supabase for analytics
+- **HTML formatting:** Notifications use HTML formatting with emojis and sanitized content
 - **Job validation:** Only complete job postings (with description, type, compensation, date) are stored
-- **Word-boundary matching:** Keywords now match whole words only (e.g., 'ai' matches 'AI specialist' but not 'PAID', 'TRAIN', 'MAINTAIN')
+- **Modular design:** Each workflow operates independently through PostgreSQL as the data bus
 
 ---
 
-**Questions?** Check `spec.md` for the full technical details.
+See `spec.md` for detailed technical specifications and implementation details.
