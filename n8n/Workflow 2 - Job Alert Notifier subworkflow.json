@@ -86,7 +86,7 @@
     {
       "parameters": {
         "chatId": "={{ $json.chat_id }}",
-        "text": "=<b>🔔 New Job Match!</b>\n\n<b>{{ $('When Executed by Another Workflow').first().json.job_title }}</b>\n\n📝 <b>Description:</b>\n{{ $('When Executed by Another Workflow').first().json.job_description.substring(0, 120) }}...\n\n💼 <b>Type:</b> {{ $('When Executed by Another Workflow').first().json.type_of_work }}\n💰 <b>Pay:</b> {{ $('When Executed by Another Workflow').first().json.compensation }}\n⏰ <b>Hours:</b> {{ $('When Executed by Another Workflow').first().json.hours_per_week }}\n\n👉 <a href=\"https://www.onlinejobs.ph/jobseekers/job/{{ $('When Executed by Another Workflow').first().json.job_id }}\">Apply here!</a>",
+        "text": "=<b>🔔 New Job Match!</b>\n\n<b>{{\n$('When Executed by Another Workflow').first().json.job_title\n  .replace(/&/g, '')\n  .replace(/</g, '')\n  .replace(/>/g, '')\n  .replace(/\"/g, '')\n}}</b>\n\n📝 <b>Description:</b>\n{{\n$('When Executed by Another Workflow').first().json.job_description\n  .substring(0, 120)\n  .replace(/&/g, '')\n  .replace(/</g, '')\n  .replace(/>/g, '')\n  .replace(/\"/g, '')\n}}...\n\n💼 <b>Type:</b> {{\n$('When Executed by Another Workflow').first().json.type_of_work\n  .replace(/&/g, '&amp;')\n  .replace(/</g, '&lt;')\n  .replace(/>/g, '&gt;')\n  .replace(/\"/g, '&quot;')\n}}\n\n💰 <b>Pay:</b> {{\n$('When Executed by Another Workflow').first().json.compensation\n  .replace(/&/g, '')\n  .replace(/</g, '')\n  .replace(/>/g, '')\n  .replace(/\"/g, '')\n}}\n\n⏰ <b>Hours:</b> {{\n$('When Executed by Another Workflow').first().json.hours_per_week\n}}\n\n👉 <a href=\"https://www.onlinejobs.ph/jobseekers/job/{{ $('When Executed by Another Workflow').first().json.job_id }}\">\nApply here!\n</a>",
         "additionalFields": {
           "appendAttribution": false,
           "parse_mode": "HTML"
@@ -101,13 +101,14 @@
       "id": "5e1adbff-713e-4780-a316-a62351d3e1e8",
       "name": "Send a text message",
       "webhookId": "feb7dace-92cd-40de-b934-328a31f2c5c1",
-      "retryOnFail": true,
+      "retryOnFail": false,
       "credentials": {
         "telegramApi": {
           "id": "2Izdb1Nh53OzgsTq",
           "name": "OLJ Alert Bot"
         }
-      }
+      },
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -116,8 +117,8 @@
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
       "position": [
-        2192,
-        0
+        2576,
+        -16
       ],
       "id": "4a903dfe-8720-4593-a88f-42fbe89e99a4",
       "name": "Wait",
@@ -329,6 +330,94 @@
       ],
       "id": "74a0205f-2d71-48d4-9289-9718077ab565",
       "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "errorMessage": "={{ $json.error }}"
+      },
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        2368,
+        240
+      ],
+      "id": "b740c8f5-cfff-46f2-b9d9-4624d4072727",
+      "name": "Stop and Error"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "430a3030-1f38-43a1-b6de-13b7999f8db2",
+              "leftValue": "={{ $json.error }}",
+              "rightValue": "bot was blocked by the user",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2176,
+        64
+      ],
+      "id": "37529035-5218-4962-8640-1eedfbb18dcc",
+      "name": "If blocked"
+    },
+    {
+      "parameters": {
+        "operation": "deleteTable",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list",
+          "cachedResultName": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "user_subscriptions",
+          "mode": "list",
+          "cachedResultName": "user_subscriptions"
+        },
+        "deleteCommand": "delete",
+        "where": {
+          "values": [
+            {
+              "column": "chat_id",
+              "value": "={{ $json.chat_id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2384,
+        64
+      ],
+      "id": "1ccc731a-9424-4a8b-af0c-03f3769a3865",
+      "name": "Delete table or rows",
+      "executeOnce": true,
+      "credentials": {
+        "postgres": {
+          "id": "ZzBIvq2za0U7odoL",
+          "name": "job_alert_client"
+        }
+      }
     }
   ],
   "connections": {
@@ -380,6 +469,13 @@
             "type": "main",
             "index": 0
           }
+        ],
+        [
+          {
+            "node": "If blocked",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
@@ -410,6 +506,35 @@
         [
           {
             "node": "Execute a SQL query1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If blocked": {
+      "main": [
+        [
+          {
+            "node": "Delete table or rows",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Stop and Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete table or rows": {
+      "main": [
+        [
+          {
+            "node": "Wait",
             "type": "main",
             "index": 0
           }
