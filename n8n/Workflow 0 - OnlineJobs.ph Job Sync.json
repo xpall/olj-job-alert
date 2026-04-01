@@ -6,7 +6,7 @@
           "interval": [
             {
               "field": "minutes",
-              "minutesInterval": 2
+              "minutesInterval": 8
             }
           ]
         }
@@ -215,7 +215,8 @@
           "id": "ZzBIvq2za0U7odoL",
           "name": "job_alert_client"
         }
-      }
+      },
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -359,7 +360,9 @@
       "name": "Loop Over Items"
     },
     {
-      "parameters": {},
+      "parameters": {
+        "amount": 10
+      },
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
       "position": [
