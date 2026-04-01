@@ -114,7 +114,7 @@
       "typeVersion": 3.4,
       "position": [
         688,
-        0
+        -80
       ],
       "id": "96fda4b6-6a7b-4f8c-8a44-03a74085a757",
       "name": "Extract keywords"
@@ -368,7 +368,7 @@
       "typeVersion": 1,
       "position": [
         896,
-        0
+        -80
       ],
       "id": "ab28eeba-f42c-4579-9b7d-39f8956c3f6c",
       "name": "Split Out"
@@ -408,7 +408,7 @@
       "typeVersion": 1,
       "position": [
         384,
-        208
+        272
       ],
       "id": "61b245be-c482-480f-8775-81efe79e1c10",
       "name": "Sticky Note3"
@@ -442,7 +442,7 @@
       "typeVersion": 2.6,
       "position": [
         448,
-        288
+        352
       ],
       "id": "6584551e-11d9-49b2-a061-8e4d318026a8",
       "name": "Delete table or rows1",
@@ -466,7 +466,7 @@
       "typeVersion": 1.2,
       "position": [
         848,
-        288
+        352
       ],
       "id": "3ccece0f-81c9-49c1-beb3-13d52aa261af",
       "name": "Send a text message1",
@@ -497,7 +497,7 @@
       "typeVersion": 3.4,
       "position": [
         640,
-        288
+        352
       ],
       "id": "7cb52709-a2cc-4657-b467-7baea1adb79c",
       "name": "Set Payload1",
@@ -534,7 +534,7 @@
       "typeVersion": 2.3,
       "position": [
         208,
-        288
+        352
       ],
       "id": "e9108827-7fb2-493e-a6c9-aac3f46088fe",
       "name": "If unsub"
@@ -553,8 +553,56 @@
                 },
                 "conditions": [
                   {
+                    "id": "425bfa05-fa1d-4c1c-bc77-e3b690206b30",
                     "leftValue": "={{ $json.message.text }}",
-                    "rightValue": "/keywordsub",
+                    "rightValue": "/stats",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "stats"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "a9997c6d-872d-4fef-a204-92a936e917be",
+                    "leftValue": "={{ $json.message.text }}",
+                    "rightValue": "/admin",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "admin"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.message.text }}",
+                    "rightValue": "/keywordsub ",
                     "operator": {
                       "type": "string",
                       "operation": "contains"
@@ -620,7 +668,7 @@
       "typeVersion": 1,
       "position": [
         160,
-        528
+        640
       ],
       "id": "4059b746-739a-46e8-9590-42698b88da79",
       "name": "Sticky Note4"
@@ -637,7 +685,7 @@
       "typeVersion": 1.2,
       "position": [
         432,
-        608
+        720
       ],
       "id": "1f286eb3-1492-43a1-b91e-74883faffe60",
       "name": "Send a text message2",
@@ -668,11 +716,303 @@
       "typeVersion": 3.4,
       "position": [
         224,
-        608
+        720
       ],
       "id": "a935ef41-1128-46cf-a4a3-9e082d22aa95",
       "name": "Set Payload2",
       "executeOnce": true
+    },
+    {
+      "parameters": {
+        "content": "## Logging",
+        "height": 256,
+        "width": 624,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        160,
+        944
+      ],
+      "id": "83789949-7070-49df-b428-599bb62d90d0",
+      "name": "Sticky Note5"
+    },
+    {
+      "parameters": {
+        "tableId": "olj-alerts",
+        "dataToSend": "autoMapInputData"
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        448,
+        1008
+      ],
+      "id": "3c274853-a91e-48d9-ab95-639843f6722d",
+      "name": "Create a row",
+      "credentials": {
+        "supabaseApi": {
+          "id": "JBYgDkM2pZ9KEN7X",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "65bb8e15-b49c-45e4-8069-2b885527f905",
+              "name": "first_name",
+              "value": "={{ $json.message.from.first_name ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "286046e7-46c3-498b-8652-a9678c00aac7",
+              "name": "last_name",
+              "value": "={{ $json.message.from.last_name ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "3268d8b1-2cab-4525-b732-a228a3927adb",
+              "name": "username",
+              "value": "={{ $json.message.from.username ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "95f40429-8e93-4641-a6a0-635ed5165969",
+              "name": "keywords",
+              "value": "={{ $json.message.text ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "5a7f14e1-2701-44af-a300-fe520e8eeb36",
+              "name": "execution_id",
+              "value": "={{ $execution.id }}",
+              "type": "string"
+            },
+            {
+              "id": "3cdee262-ccac-4729-87be-9e7b6fa1d812",
+              "name": "chat_id",
+              "value": "={{ $json.message.chat.id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        208,
+        1008
+      ],
+      "id": "771ebc6e-985a-4d6a-bc55-3acd38792f62",
+      "name": "Set Payload3",
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "=**Too many keywords 🫨**",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        688,
+        96
+      ],
+      "id": "ef9cff21-d2f8-4836-a9c9-1b752293200a",
+      "name": "Send a text message3",
+      "webhookId": "56c71022-e284-4348-ad05-2c51554bebd4",
+      "executeOnce": true,
+      "credentials": {
+        "telegramApi": {
+          "id": "2Izdb1Nh53OzgsTq",
+          "name": "OLJ Alert Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "9f9386f9-2317-4247-86b1-b6790d04315c",
+              "leftValue": "={{ $json.message.text }}",
+              "rightValue": "=admin",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            },
+            {
+              "id": "81ed0a10-8742-4857-b79f-9fc1b416b82c",
+              "leftValue": "={{ $json.message.from.username }}",
+              "rightValue": "johnlloyddev",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {
+          "ignoreCase": true
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        208,
+        -176
+      ],
+      "id": "126f7db9-7a84-432b-bf7e-1da644ee1278",
+      "name": "If admin"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "bcdbf512-0c4f-4005-9258-29650d5d5e49",
+              "name": "keywordsub",
+              "value": "={{ $json.message.text.replaceAll('/keywordsub', '').trim().split(',').map(item => item.trim()) }}",
+              "type": "array"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        448,
+        -192
+      ],
+      "id": "fc67a1db-1652-44ab-91ca-ce11bdd40a6a",
+      "name": "Extract keywords2"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "9f9386f9-2317-4247-86b1-b6790d04315c",
+              "leftValue": "={{ $json.message.text }}",
+              "rightValue": "=stats",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            },
+            {
+              "id": "81ed0a10-8742-4857-b79f-9fc1b416b82c",
+              "leftValue": "={{ $json.message.from.username }}",
+              "rightValue": "johnlloyddev",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {
+          "ignoreCase": true
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        208,
+        -368
+      ],
+      "id": "0178db62-c620-4f95-a668-8e5557fd10ae",
+      "name": "If admin1"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COUNT(*) AS count_job_postings\nFROM job_postings;\n\nSELECT COUNT(DISTINCT(chat_id)) AS count_user_subscriptions\nFROM user_subscriptions;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        448,
+        -368
+      ],
+      "id": "1320a7ce-b2d7-426d-bd76-6ef5cb7ea63b",
+      "name": "count_job_postings",
+      "executeOnce": true,
+      "credentials": {
+        "postgres": {
+          "id": "ZzBIvq2za0U7odoL",
+          "name": "job_alert_client"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        672,
+        -368
+      ],
+      "id": "51590420-d01a-4300-a3be-7d56456c8289",
+      "name": "Aggregate"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "=<b>📊 Stats</b> | 🧾 Jobs: <code>{{ $json.data[0].count_job_postings }}</code> • 👥 Subs: <code>{{ $json.data[1].count_user_subscriptions }}</code>",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        896,
+        -368
+      ],
+      "id": "22cebc39-3d05-4658-a241-ca13f14e62ce",
+      "name": "Send a text message4",
+      "webhookId": "56c71022-e284-4348-ad05-2c51554bebd4",
+      "executeOnce": true,
+      "credentials": {
+        "telegramApi": {
+          "id": "2Izdb1Nh53OzgsTq",
+          "name": "OLJ Alert Bot"
+        }
+      }
     }
   ],
   "connections": {
@@ -681,6 +1021,11 @@
         [
           {
             "node": "Switch",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Set Payload3",
             "type": "main",
             "index": 0
           }
@@ -703,6 +1048,13 @@
         [
           {
             "node": "Extract keywords",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send a text message3",
             "type": "main",
             "index": 0
           }
@@ -824,6 +1176,20 @@
       "main": [
         [
           {
+            "node": "If admin1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If admin",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
             "node": "If keywordsub",
             "type": "main",
             "index": 0
@@ -850,6 +1216,77 @@
         [
           {
             "node": "Send a text message2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Payload3": {
+      "main": [
+        [
+          {
+            "node": "Create a row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If admin": {
+      "main": [
+        [
+          {
+            "node": "Extract keywords2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract keywords2": {
+      "main": [
+        [
+          {
+            "node": "Split Out",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Delete table or rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If admin1": {
+      "main": [
+        [
+          {
+            "node": "count_job_postings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "count_job_postings": {
+      "main": [
+        [
+          {
+            "node": "Aggregate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate": {
+      "main": [
+        [
+          {
+            "node": "Send a text message4",
             "type": "main",
             "index": 0
           }
