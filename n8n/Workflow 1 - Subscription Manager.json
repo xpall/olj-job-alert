@@ -10,8 +10,8 @@
       "type": "n8n-nodes-base.telegramTrigger",
       "typeVersion": 1.2,
       "position": [
-        -400,
-        -16
+        -736,
+        16
       ],
       "id": "d27efa50-f4ff-4ec3-9816-1c75a35ee9e3",
       "name": "Telegram Trigger",
@@ -746,8 +746,8 @@
       "type": "n8n-nodes-base.supabase",
       "typeVersion": 1,
       "position": [
-        448,
-        1008
+        720,
+        1024
       ],
       "id": "3c274853-a91e-48d9-ab95-639843f6722d",
       "name": "Create a row",
@@ -805,8 +805,8 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        208,
-        1008
+        480,
+        1024
       ],
       "id": "771ebc6e-985a-4d6a-bc55-3acd38792f62",
       "name": "Set Payload3",
@@ -1013,6 +1013,73 @@
           "name": "OLJ Alert Bot"
         }
       }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "b4aea32a-4027-46b2-b64d-5b88382c7e4c",
+              "leftValue": "={{ $json.message.from.username }}",
+              "rightValue": "johnlloyddev",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        224,
+        1024
+      ],
+      "id": "d7ee1122-0211-4145-b187-f0eb4cf43d57",
+      "name": "If not admin"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "7d127923-302d-45e5-aed8-6cdee41607e5",
+              "leftValue": "={{ [].includes($json.message.from.id) }}",
+              "rightValue": "={{ $json.message.from.id }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -448,
+        -176
+      ],
+      "id": "2494529b-9c01-433e-af0a-1d36e56217d6",
+      "name": "If banned"
     }
   ],
   "connections": {
@@ -1020,12 +1087,12 @@
       "main": [
         [
           {
-            "node": "Switch",
+            "node": "If not admin",
             "type": "main",
             "index": 0
           },
           {
-            "node": "Set Payload3",
+            "node": "If banned",
             "type": "main",
             "index": 0
           }
@@ -1287,6 +1354,30 @@
         [
           {
             "node": "Send a text message4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If not admin": {
+      "main": [
+        [
+          {
+            "node": "Set Payload3",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "If banned": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Switch",
             "type": "main",
             "index": 0
           }
