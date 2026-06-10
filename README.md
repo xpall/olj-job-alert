@@ -1,5 +1,7 @@
 # OLJAlerts 🚨
 
+> **⚠️ DEPRECATED** — This project is no longer maintained. V2 is available at [olj-alerts-v2.johnlloyd.dev](https://olj-alerts-v2.johnlloyd.dev).
+
 Automated job alerts for OnlineJobs.ph — get notified on Telegram when jobs matching your keywords are posted.
 
 **Perfect for:** Job hunters who want instant notifications without constantly checking job boards.
